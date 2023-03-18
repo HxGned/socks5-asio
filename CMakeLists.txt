@@ -31,4 +31,4 @@ set(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/build/bin)
 # compile && link
 aux_source_directory(. SOURCES)
 add_executable(socks5-boost ${SOURCES})
-target_link_libraries(socks5-boost Boost::system)
+target_link_libraries(socks5-boost Boost::system Threads::Threads)

@@ -20,6 +20,7 @@ set(CMAKE_CXX_FLAGS
 
 # multi thread support
 find_package(Threads REQUIRED)
+find_package(Boost 1.65 COMPONENTS system REQUIRED)
 
 # 'gcc -I' include directories
 include_directories(${PROJECT_SOURCE_DIR})
@@ -30,3 +31,4 @@ set(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/build/bin)
 # compile && link
 aux_source_directory(. SOURCES)
 add_executable(socks5-boost ${SOURCES})
+target_link_libraries(socks5-boost Boost::system)

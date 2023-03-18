@@ -2,9 +2,10 @@
 #define __SOCKS5_HH__
 
 #include <cstdint>
-#include <boost/asio.hpp>
 #include <string>
 #include <atomic>
+
+#include <boost/asio.hpp>
 
 using std::string;
 using boost::asio::io_service;
@@ -21,7 +22,7 @@ private:
     std::atomic_uint64_t sessionId_;
 
     boost::asio::ip::tcp::acceptor acceptor_;
-    boost::asio::ip::tcp::socket inSocket_;
+    boost::asio::ip::tcp::socket acceptSocket_;
 };
 
 #endif

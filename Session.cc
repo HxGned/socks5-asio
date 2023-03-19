@@ -318,12 +318,12 @@ void Session::doRead(int direction)
 
 void Session::doWrite(int direction, size_t length)
 {
-    // write local side
+    // write remote side
     if (direction & 0x1) {
 
     }
 
-    // write remote side
+    // write local side
     if (direction & 0x2) {
         
     }

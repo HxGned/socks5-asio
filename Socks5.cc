@@ -30,7 +30,8 @@ void Socks5Server::doAccept()
             this->sessionId_++;
             LOG_DEBUG("accept success");
             // handle incoming connection, move socket object to session
-            std::make_shared<Session>(std::move(acceptSocket_), sessionId_)->start();
+            auto session = std::make_shared<Session>(std::move(acceptSocket_), sessionId_);
+            session->start();
         } else {
             LOG_WARN("async_accept error! info: [%s]", ec.message().c_str());
         }

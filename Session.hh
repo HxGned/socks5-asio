@@ -26,11 +26,11 @@ private:
 
     void readSocks5Request();
     void doResolve();
-    void doConnect(tcp::resolver::iterator& it);
+    void doConnect(tcp::resolver::iterator& it);    // connect to resolved ip
     void writeSocks5Resp();
 
-    void doRead();
-    void doWrite();
+    void doRead(int direction);
+    void doWrite(int direction);
 private:
     uint64_t sessionId_;            // sessionId for current session
 

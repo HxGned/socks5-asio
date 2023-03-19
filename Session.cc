@@ -9,8 +9,8 @@ using namespace boost::asio;
 static const int kDefaultBufferSize = 4096;
 
 Session::Session(tcp::socket inSocket, uint64_t sessionId) : sessionId_(sessionId), inSocket_(std::move(inSocket)), \
-    outSocket_(inSocket_.get_io_service()), resolver_(inSocket_.get_io_service()), \
-        inBuf_(kDefaultBufferSize), outBuf_(kDefaultBufferSize)
+    outSocket_(inSocket_.get_io_service()), resolver_(inSocket_.get_io_service()), inBuf_(kDefaultBufferSize), \
+    outBuf_(kDefaultBufferSize)
 {
     LOG_DEBUG("Session object created! sessionId: [%llu]", sessionId_);
 
@@ -50,7 +50,7 @@ o  X'FF' NO ACCEPTABLE METHODS
 */
 void Session::readSocks5HandShake()
 {
-    LOG_DEBUG("readSocks5HandShake begin!");
+    // LOG_DEBUG("readSocks5HandShake begin!");
 
     auto self = shared_from_this();
 
@@ -84,12 +84,12 @@ void Session::readSocks5HandShake()
             }
         }
     );
-    LOG_DEBUG("readSocks5HandShake end!");
+    // LOG_DEBUG("readSocks5HandShake end!");
 }
 
 void Session::writeSocks5HandShake()
 {
-    LOG_DEBUG("writeSocks5HandShake begin!");
+    // LOG_DEBUG("writeSocks5HandShake begin!");
 
     auto self = shared_from_this();
 
@@ -111,7 +111,7 @@ void Session::writeSocks5HandShake()
         }
     );
 
-    LOG_DEBUG("writeSocks5HandShake end!");
+    // LOG_DEBUG("writeSocks5HandShake end!");
 }
 
 /*
@@ -221,7 +221,7 @@ void Session::doConnect(tcp::resolver::iterator& it)
     auto self = shared_from_this();
 
     // connect to remote host
-    this->outSocket_.async_connect(*it, 
+    this->outSocket_.async_connect(*it, \
         [self, this] (const boost::system::error_code& ec) {
             if (!ec) {
                 writeSocks5Resp();
@@ -277,5 +277,54 @@ void Session::writeSocks5Resp()
     // clear buffer
     memset((void *)this->inBuf_.data(), 0x00, inBuf_.size());
 
+    uint32_t remoteIPAddr = this->outSocket_.remote_endpoint().address().to_v4().to_ulong();
+    uint16_t remotePort = htons(this->outSocket_.remote_endpoint().port()); // convert to network endian
 
+    // set return msg
+    inBuf_[0] = 0x05;   // version: 5.0
+    inBuf_[1] = 0x00;   // server connect to remote host SUCCESS
+    inBuf_[2] = 0x00;   // reserved byte
+    inBuf_[3] = 0x01;   // atype: ip-addr
+    memcpy(&(inBuf_[4]), (void*)&remoteIPAddr, sizeof(remoteIPAddr));   // ip addr
+    memcpy(&(inBuf_[8]), (void*)&remotePort, sizeof(remotePort));   // port
+
+    // send back handshake
+    this->inSocket_.async_send(boost::asio::buffer(inBuf_, 10), \
+        [self, this] (const boost::system::error_code& ec, size_t length)
+        {
+            if (!ec) {
+                // goto stream phase, read both side first
+                doRead(0x03);
+            } else {
+                LOG_ERROR("error occured while async_connect for writeSocks5Resp! error info: [%s], sessionId: [%llu], will close", ec.message().c_str(), sessionId_);
+                return;
+            }
+        }
+    );
+}
+
+void Session::doRead(int direction)
+{
+    // read local side
+    if (direction & 0x1) {
+
+    }
+
+    // read remote side
+    if (direction & 0x2) {
+
+    }
+}
+
+void Session::doWrite(int direction)
+{
+    // write local side
+    if (direction & 0x1) {
+
+    }
+
+    // write remote side
+    if (direction & 0x2) {
+        
+    }
 }

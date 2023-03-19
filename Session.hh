@@ -30,7 +30,7 @@ private:
     void writeSocks5Resp();
 
     void doRead(int direction);
-    void doWrite(int direction);
+    void doWrite(int direction, size_t length);
 private:
     uint64_t sessionId_;            // sessionId for current session
 

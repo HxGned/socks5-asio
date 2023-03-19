@@ -316,7 +316,7 @@ void Session::doRead(int direction)
     }
 }
 
-void Session::doWrite(int direction)
+void Session::doWrite(int direction, size_t length)
 {
     // write local side
     if (direction & 0x1) {

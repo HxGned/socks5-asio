@@ -25,16 +25,24 @@ private:
     void writeSocks5HandShake();
 
     void readSocks5Request();
-    void resolve();
-private:
-    uint64_t sessionId_;
+    void doResolve();
+    void doConnect(tcp::resolver::iterator& it);
+    void writeSocks5Resp();
 
-    boost::asio::ip::tcp::socket inSocket_;
-    boost::asio::ip::tcp::socket outSocket_;
-    boost::asio::ip::tcp::resolver resolver_;
+    void doRead();
+    void doWrite();
+private:
+    uint64_t sessionId_;            // sessionId for current session
+
+    tcp::socket inSocket_;
+    tcp::socket outSocket_;
+    tcp::resolver resolver_;        // dns async resolver
 
     vector<char> inBuf_;
     vector<char> outBuf_;
+
+    std::string remoteAddr_;
+    std::string remotePort_;
 };
 
 #endif

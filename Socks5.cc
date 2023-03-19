@@ -8,7 +8,7 @@ using namespace std;
 using namespace boost::asio::ip;
 
 Socks5Server::Socks5Server(io_service& ios, uint16_t listenPort) : \
-    port_(listenPort), serverName_(""), sessionId_(0), acceptor_(ios, tcp::endpoint(tcp::v4(), listenPort)), \
+    port_(listenPort), serverName_(""), sessionId_(0), acceptor_(ios, tcp::endpoint(tcp::v4(), listenPort)),    // acceptor will bind && listen here
     acceptSocket_(ios)
 {
     LOG_DEBUG("Socks5Server[%s] object constructed!", serverName_.c_str());

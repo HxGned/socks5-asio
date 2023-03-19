@@ -4,6 +4,7 @@
 #include <iostream>
 
 using namespace std;
+using namespace boost::asio;
 
 static const int kDefaultBufferSize = 4096;
 
@@ -78,7 +79,7 @@ void Session::readSocks5HandShake()
                 // write socks5 handshake response back to client
                 writeSocks5HandShake();
             } else {
-                LOG_ERROR("error occured while async_receive! error info: [%s]", ec.message().c_str());
+                LOG_ERROR("error occured while async_receive for readSocks5HandShake! error info: [%s], sessionId: [%llu]", ec.message().c_str(), sessionId_);
                 return;
             }
         }
@@ -92,18 +93,189 @@ void Session::writeSocks5HandShake()
 
     auto self = shared_from_this();
 
+    // send handshake result back to client
     inSocket_.async_send(boost::asio::buffer(inBuf_, 2), \
         [this, self] (const boost::system::error_code& ec, std::size_t length) {
             if (!ec) {
                 LOG_DEBUG("%d bytes sent to client!", length);
-                
-                // handle client request info
+                if (inBuf_[1] == 0xFF) {
+                    LOG_DEBUG("no proper auth method found, will disconnect!");
+                    return;
+                }
+                // parse socks5 request info
+                readSocks5Request();
             } else {
-                LOG_ERROR("async_send failed! error info: [%s]", ec.message().c_str());
+                LOG_ERROR("error occured while async_send for writeSocks5HandShake! error info: [%s], sessionId: [%llu]", ec.message().c_str(), sessionId_);
                 return;
             }
         }
     );
 
     LOG_DEBUG("writeSocks5HandShake end!");
+}
+
+/*
+The SOCKS request is formed as follows:
+
++----+-----+-------+------+----------+----------+
+|VER | CMD |  RSV  | ATYP | DST.ADDR | DST.PORT |
++----+-----+-------+------+----------+----------+
+| 1  |  1  | X'00' |  1   | Variable |    2     |
++----+-----+-------+------+----------+----------+
+
+Where:
+
+o  VER    protocol version: X'05'
+o  CMD
+o  CONNECT X'01'
+o  BIND X'02'
+o  UDP ASSOCIATE X'03'
+o  RSV    RESERVED
+o  ATYP   address type of following address
+o  IP V4 address: X'01'
+o  DOMAINNAME: X'03'
+o  IP V6 address: X'04'
+o  DST.ADDR       desired destination address
+o  DST.PORT desired destination port_ in network octet
+order
+
+The SOCKS server will typically evaluate the request based on source
+and destination addresses, and return one or more reply messages, as
+appropriate for the request type.
+*/
+void Session::readSocks5Request()
+{
+    auto self = shared_from_this();
+
+    inSocket_.async_receive(boost::asio::buffer(inBuf_), 
+        [self, this] (const boost::system::error_code& ec, size_t length)
+        {
+            if (!ec) {
+                LOG_DEBUG("length: %d", length);
+                if (length < 5 || inBuf_[0] != 0x05 || inBuf_[1] != 0x01) {
+                    LOG_WARN("invalid socks5 request, will close session[%llu]", sessionId_);
+                    return;
+                }
+                // address type from request
+                uint8_t addressType = inBuf_[3];
+                LOG_DEBUG("addressType: %d", addressType);
+
+                if (addressType == 0x01) {  // IPV4
+                    if (length != 10) {
+                        LOG_DEBUG("AddressType is 0x01 while socks5 req length is not 0x10, invalid session: [%llu], will close", sessionId_);
+                        return;
+                    }
+                    // parse ip addr from request
+                    this->remoteAddr_ = ip::address_v4(ntohl(*((uint32_t*)(&inBuf_[4])))).to_string();
+                    this->remotePort_ = std::to_string(ntohs(*((uint16_t*)(&inBuf_[7]))));
+                    LOG_DEBUG("addr: [%s], port: [%s]", remoteAddr_.c_str(), remotePort_.c_str());
+                } else if (addressType == 0x03) {   // DOMAIN
+                    uint8_t domainLen = inBuf_[4];
+                    LOG_DEBUG("DomainLength: [%d]", domainLen);
+                    
+                    // 5: fixed socks5 req header length while addrType is DOMAIN!
+                    if (length != 5 + domainLen + 2) {
+                        LOG_ERROR("AddressType is 0x03, self-described domainLen is [%d] while socks5 req length is [%d] but not [%d], invalid session: [%llu], will close", \
+                            domainLen, length, (5 + domainLen + 2), sessionId_);
+                        return;
+                    }
+                    this->remoteAddr_ = std::string(inBuf_[5], domainLen);
+                    this->remotePort_ = std::to_string(ntohs(*((uint16_t*)(&inBuf_[5 + domainLen]))));
+                    LOG_DEBUG("addr: [%s], port: [%s]", remoteAddr_.c_str(), remotePort_.c_str());
+
+                    // call async_resolve to resolve remote address
+                    doResolve();
+                } else {
+                    LOG_DEBUG("socks5 AddressType is not supported, will close session[%llu]", sessionId_);
+                    return;
+                }
+            } else {
+                LOG_ERROR("error occured while async_receive for readSocks5Request! error info: [%s], sessionId: [%llu]", ec.message().c_str(), sessionId_);
+                return;
+            }
+        }
+    );
+}
+
+void Session::doResolve()
+{
+    // keep session from destory
+    auto self = shared_from_this();
+
+    this->resolver_.async_resolve(tcp::resolver::query({this->remoteAddr_, this->remotePort_}), 
+        [self, this] (const boost::system::error_code& ec, tcp::resolver::iterator it)
+        {
+            if (!ec) {
+                doConnect(it);
+            } else {
+                LOG_ERROR("error occured while async_resolve for doResolve! error info: [%s], sessionId: [%llu], will close", ec.message().c_str(), sessionId_);
+                return;
+            }
+        }
+    );
+}
+
+void Session::doConnect(tcp::resolver::iterator& it)
+{
+    // keep session from destory
+    auto self = shared_from_this();
+
+    // connect to remote host
+    this->outSocket_.async_connect(*it, 
+        [self, this] (const boost::system::error_code& ec) {
+            if (!ec) {
+                writeSocks5Resp();
+            } else {
+                LOG_ERROR("error occured while async_connect for doConnect! error info: [%s], sessionId: [%llu], will close", ec.message().c_str(), sessionId_);
+                return;
+            }
+        }
+    );
+}
+
+/*
+The SOCKS request information is sent by the client as soon as it has
+established a connection to the SOCKS server, and completed the
+authentication negotiations.  The server evaluates the request, and
+returns a reply formed as follows:
+
++----+-----+-------+------+----------+----------+
+|VER | REP |  RSV  | ATYP | BND.ADDR | BND.PORT |
++----+-----+-------+------+----------+----------+
+| 1  |  1  | X'00' |  1   | Variable |    2     |
++----+-----+-------+------+----------+----------+
+
+Where:
+
+o  VER    protocol version: X'05'
+o  REP    Reply field:
+o  X'00' succeeded
+o  X'01' general SOCKS server failure
+o  X'02' connection not allowed by ruleset
+o  X'03' Network unreachable
+o  X'04' Host unreachable
+o  X'05' Connection refused
+o  X'06' TTL expired
+o  X'07' Command not support_ed
+o  X'08' Address type not support_ed
+o  X'09' to X'FF' unassigned
+o  RSV    RESERVED
+o  ATYP   address type of following address
+o  IP V4 address: X'01'
+o  DOMAINNAME: X'03'
+o  IP V6 address: X'04'
+o  BND.ADDR       server bound address
+o  BND.PORT       server bound port_ in network octet order
+
+Fields marked RESERVED (RSV) must be set to X'00'.
+*/
+void Session::writeSocks5Resp()
+{
+    // keep session from destory
+    auto self = shared_from_this();
+
+    // clear buffer
+    memset((void *)this->inBuf_.data(), 0x00, inBuf_.size());
+
+
 }

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.0)
-project(socks5-boost)
+project(socks5-asio)
 
 if (${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
     message("building with Linux!")
@@ -30,5 +30,5 @@ set(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/build/bin)
 
 # compile && link
 aux_source_directory(. SOURCES)
-add_executable(socks5-boost ${SOURCES})
-target_link_libraries(socks5-boost Boost::system Threads::Threads)
+add_executable(socks5-asio ${SOURCES})
+target_link_libraries(socks5-asio Boost::system Threads::Threads)

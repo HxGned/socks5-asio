@@ -12,6 +12,7 @@ using boost::asio::io_service;
 
 int main(int argc, char* argv[])
 {
+    LOG_DEBUG("socks5-asio");
     LOG_DEBUG("main begin!");
     // io_service object
     io_service ios;
